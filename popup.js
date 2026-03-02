@@ -134,12 +134,17 @@ async function loadAndPredictFolders() {
   // 1. Try to read existing folders from vault
   try {
     const handle = await idbGet("vaultHandle");
-    if (handle && typeof handle.queryPermission === "function") {
-      const state = await handle.queryPermission({ mode: "readwrite" });
-      if (state === "granted") {
-        await scanFoldersDeep(handle, folders);
+    if (handle) {
+      if (typeof handle.queryPermission === "function") {
+        const state = await handle.queryPermission({ mode: "readwrite" });
+        if (state === "granted") {
+          await scanFoldersDeep(handle, folders);
+        } else {
+          console.warn("Vault handle exists but needs re-authorization for deep scan.");
+        }
       } else {
-        console.warn("Vault handle exists but needs re-authorization for deep scan.");
+        // Fallback for browsers/environments where queryPermission isn't present
+        await scanFoldersDeep(handle, folders);
       }
     }
   } catch (err) {
@@ -285,7 +290,12 @@ async function scanFoldersDeep(dirHandle, foldersSet, prefix = "", currentDepth 
   if (currentDepth >= maxDepth) return;
 
   try {
-    for await (const [name, entry] of dirHandle.entries()) {
+    // Attempting to read entries
+    // For some restricted root folders, or unsupported APIs, this might throw
+    const entries = dirHandle.values(); // using values() instead of entries array for safer iteration in some Chromium builds
+
+    for await (const entry of entries) {
+      const name = entry.name;
       if (entry.kind === "directory" && !name.startsWith(".") && !name.startsWith("_")) {
         const fullPath = prefix ? `${prefix}/${name}` : name;
         foldersSet.add(fullPath);
