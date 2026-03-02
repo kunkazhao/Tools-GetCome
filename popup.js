@@ -72,7 +72,7 @@ function updateMode(mode) {
 }
 
 function renderResult(result) {
-  resultFile.textContent = result.fileName;
+  resultFile.textContent = `/${result.fileName}`;
   resultWords.textContent = `${result.wordCount}`;
   resultImages.textContent = `${result.imagesSaved} 成功 / ${result.imagesFailed} 失败`;
   resultStatus.textContent = result.imagesFailed > 0 ? "已入库（部分图片失败）" : "已入库";
