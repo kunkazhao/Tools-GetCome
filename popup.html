@@ -1,0 +1,77 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Get</title>
+  <link rel="stylesheet" href="./popup.css" />
+</head>
+
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <h1>Get</h1>
+        <p>网页提取并一键入库</p>
+      </div>
+      <span id="vaultStatus" class="badge badge-warn">未授权</span>
+    </header>
+
+    <section class="panel">
+      <label class="label">提取模式</label>
+      <div class="segmented" id="modeSwitch">
+        <button class="seg active" data-mode="current">当前网页</button>
+        <button class="seg" data-mode="url">输入 URL</button>
+      </div>
+
+      <div id="urlGroup" class="field hidden">
+        <label for="targetUrl">目标 URL</label>
+        <input id="targetUrl" type="url" placeholder="https://example.com/article" />
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="field">
+        <label for="imageDir">图片目录（Vault相对路径）</label>
+        <input id="imageDir" type="text" placeholder="_assets/webclip-images" />
+      </div>
+      <div class="actions">
+        <button id="authorizeBtn" class="btn btn-secondary">授权 Vault 目录</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="field" style="display: flex; align-items: center; justify-content: flex-start; gap: 8px; margin-bottom: 12px; margin-top: 0;">
+        <input type="checkbox" id="isImportant" style="width: auto; height: auto;" />
+        <label for="isImportant" style="margin: 0; font-size: 13px; font-weight: bold; cursor: pointer; color: var(--accent);">设为重点文档</label>
+      </div>
+      <button id="runBtn" class="btn btn-primary">提取并一键入库</button>
+    </section>
+
+    <section class="panel">
+      <div class="progress-head">
+        <span id="progressText">等待执行</span>
+        <span id="progressValue">0%</span>
+      </div>
+      <div class="progress-track">
+        <div id="progressBar" class="progress-fill"></div>
+      </div>
+      <p id="errorText" class="error hidden"></p>
+    </section>
+
+    <section id="resultCard" class="panel result-panel hidden">
+      <h2>🎉 入库成功</h2>
+      <div class="result-content">
+        <div class="result-row"><span>文件名称</span><strong id="resultFile"></strong></div>
+        <div class="result-row"><span>内容字数</span><strong id="resultWords"></strong></div>
+        <div class="result-row"><span>图片状态</span><strong id="resultImages"></strong></div>
+        <div class="result-row"><span>最终结果</span><strong class="status-badge" id="resultStatus"></strong></div>
+      </div>
+    </section>
+    </section>
+  </main>
+  <script type="module" src="./popup.js"></script>
+</body>
+
+</html>
