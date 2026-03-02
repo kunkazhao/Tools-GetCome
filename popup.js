@@ -134,8 +134,13 @@ async function loadAndPredictFolders() {
   // 1. Try to read existing folders from vault
   try {
     const handle = await idbGet("vaultHandle");
-    if (handle) {
-      await scanFoldersDeep(handle, folders);
+    if (handle && typeof handle.queryPermission === "function") {
+      const state = await handle.queryPermission({ mode: "readwrite" });
+      if (state === "granted") {
+        await scanFoldersDeep(handle, folders);
+      } else {
+        console.warn("Vault handle exists but needs re-authorization for deep scan.");
+      }
     }
   } catch (err) {
     console.warn("Could not read vault folders array:", err);
@@ -279,16 +284,21 @@ chrome.runtime.onMessage.addListener((message) => {
 async function scanFoldersDeep(dirHandle, foldersSet, prefix = "", currentDepth = 0, maxDepth = 3) {
   if (currentDepth >= maxDepth) return;
 
-  for await (const [name, entry] of dirHandle.entries()) {
-    if (entry.kind === "directory" && !name.startsWith(".") && !name.startsWith("_")) {
-      const fullPath = prefix ? `${prefix}/${name}` : name;
-      foldersSet.add(fullPath);
-      await scanFoldersDeep(entry, foldersSet, fullPath, currentDepth + 1, maxDepth);
+  try {
+    for await (const [name, entry] of dirHandle.entries()) {
+      if (entry.kind === "directory" && !name.startsWith(".") && !name.startsWith("_")) {
+        const fullPath = prefix ? `${prefix}/${name}` : name;
+        foldersSet.add(fullPath);
+        // Recursive call (also wrapped by try-catch natively in its own execution)
+        await scanFoldersDeep(entry, foldersSet, fullPath, currentDepth + 1, maxDepth);
+      }
     }
+  } catch (error) {
+    // Ignore DOMExceptions for forbidden/restricted subfolders to allow siblings to process
+    console.warn(`Could not read items in ${prefix || "root"}:`, error);
   }
 }
 
 initialize().catch((error) => {
   setError(`初始化失败：${error.message}`);
 });
-
