@@ -16,10 +16,12 @@ const resultWords = document.getElementById("resultWords");
 const resultImages = document.getElementById("resultImages");
 const resultStatus = document.getElementById("resultStatus");
 const vaultStatus = document.getElementById("vaultStatus");
-const isImportantCheckbox = document.getElementById("isImportant");
+const folderListContainer = document.getElementById("folderList");
 
 let currentMode = "current";
 let currentRunId = null;
+let currentFolder = ""; // empty string implies "根目录"
+const DEFAULT_FOLDERS = ["小龙虾", "微信公众号", "X", "重点文档", "GitHub 工具"];
 const RUN_TIMEOUT_MS = 60000;
 
 function sendMessage(message) {
@@ -116,9 +118,86 @@ async function initialize() {
   setError("");
   setProgress(0, "等待执行");
   updateMode("current");
-  const bootstrap = await sendMessage({ action: "getBootstrapData" });
-  imageDirInput.value = bootstrap.imageDir || "_assets/webclip-images";
-  setVaultBadge(Boolean(bootstrap.hasVaultAccess));
+  try {
+    const bootstrap = await sendMessage({ action: "getBootstrapData" });
+    imageDirInput.value = bootstrap.imageDir || "_assets/webclip-images";
+    setVaultBadge(Boolean(bootstrap.hasVaultAccess));
+    await loadAndPredictFolders();
+  } catch (err) {
+    console.error("Initialization error:", err);
+  }
+}
+
+async function loadAndPredictFolders() {
+  const folders = new Set(DEFAULT_FOLDERS);
+
+  // 1. Try to read existing folders from vault
+  try {
+    const handle = await idbGet("vaultHandle");
+    if (handle) {
+      await scanFoldersDeep(handle, folders);
+    }
+  } catch (err) {
+    console.warn("Could not read vault folders array:", err);
+  }
+
+  // 2. Predict default folder base on active tab
+  let predicted = "";
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (tab && tab.url) {
+      const url = new URL(tab.url);
+      const titleLower = (tab.title || "").toLowerCase();
+
+      if (titleLower.includes("小龙虾") || titleLower.includes("openclaw")) {
+        predicted = "小龙虾";
+      } else if (url.hostname === "github.com") {
+        predicted = "GitHub 工具";
+      } else if (url.hostname === "mp.weixin.qq.com") {
+        predicted = "微信公众号";
+      } else if (url.hostname === "x.com" || url.hostname === "twitter.com") {
+        predicted = "X";
+      }
+    }
+  } catch (err) {
+    console.warn("Prediction failed:", err);
+  }
+
+  // If predicted folder wasn't in our list (e.g. manually created edge case), add it
+  if (predicted && !folders.has(predicted)) {
+    folders.add(predicted);
+  }
+
+  currentFolder = predicted;
+  renderFolderList(Array.from(folders));
+}
+
+function renderFolderList(folderNames) {
+  folderListContainer.innerHTML = "";
+
+  const allOptions = ["根目录", ...folderNames];
+
+  allOptions.forEach(name => {
+    const btn = document.createElement("button");
+    btn.className = "seg";
+    btn.textContent = name;
+
+    // "" is internally treated as "根目录"
+    const isActive = (currentFolder === "" && name === "根目录") || (currentFolder === name);
+    if (isActive) btn.classList.add("active");
+
+    btn.addEventListener("click", () => {
+      // Update state
+      currentFolder = name === "根目录" ? "" : name;
+
+      // Update UI
+      folderListContainer.querySelectorAll(".seg").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    });
+
+    folderListContainer.appendChild(btn);
+  });
 }
 
 modeSwitch.addEventListener("click", (event) => {
@@ -164,7 +243,7 @@ runBtn.addEventListener("click", async () => {
       mode: currentMode,
       url: targetUrlInput.value.trim(),
       imageDir: imageDirInput.value.trim(),
-      isImportant: isImportantCheckbox.checked
+      explicitFolder: currentFolder
     };
 
     currentRunId = crypto.randomUUID();
@@ -196,6 +275,18 @@ chrome.runtime.onMessage.addListener((message) => {
   if (!currentRunId || message.runId !== currentRunId) return;
   setProgress(message.percent ?? 0, message.text || "处理中");
 });
+
+async function scanFoldersDeep(dirHandle, foldersSet, prefix = "", currentDepth = 0, maxDepth = 3) {
+  if (currentDepth >= maxDepth) return;
+
+  for await (const [name, entry] of dirHandle.entries()) {
+    if (entry.kind === "directory" && !name.startsWith(".") && !name.startsWith("_")) {
+      const fullPath = prefix ? `${prefix}/${name}` : name;
+      foldersSet.add(fullPath);
+      await scanFoldersDeep(entry, foldersSet, fullPath, currentDepth + 1, maxDepth);
+    }
+  }
+}
 
 initialize().catch((error) => {
   setError(`初始化失败：${error.message}`);
